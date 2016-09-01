@@ -61,19 +61,24 @@ class addBook(webapp2.RequestHandler):
 class showBooks(webapp2.RequestHandler):
 	def get(self):
 		result=[]
-		cache_data = memcache.get('default_book:books')
+		cache_data = memcache.get('default_book:book')
 		# cache_data = memcache.get('key')
 		if cache_data is not None:
-			books = cache_data
+			# books = cache_data
 			self.response.out.write('from cache<br>')
+			self.response.out.write(result)
+
 		else:
 			books = ndb.gql('SELECT * FROM Book WHERE ANCESTOR IS :1 ORDER BY date DESC LIMIT 10', book_key)
-			memcache.add('default_book:books', books, 3600000)
+			# memcache.add('default_book:books', books, 3600000)
+			for book in books:
+				result.append([book.name.encode('ascii'), book.author.encode('ascii')])
+			memcache.add('default_book:book', result, 3600000)
+			self.response.out.write('db<br>')
+			self.response.out.write(result)
 
-		for book in books:
-			result.append([book.name.encode('ascii'), book.author.encode('ascii')])
 			
-		self.response.out.write(result)
+		# self.response.out.write(result)
 
 
 app = webapp2.WSGIApplication([
