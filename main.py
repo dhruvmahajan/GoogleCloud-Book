@@ -22,6 +22,7 @@ import webapp2
 
 from google.appengine.ext import ndb
 from google.appengine.api import users
+from google.appengine.api import memcache
 
 book_key = ndb.Key('book', 'default_book')
 
@@ -60,9 +61,17 @@ class addBook(webapp2.RequestHandler):
 class showBooks(webapp2.RequestHandler):
 	def get(self):
 		result=[]
-		books = ndb.gql('SELECT * FROM Book WHERE ANCESTOR IS :1 ORDER BY date DESC LIMIT 10', book_key)
+		cache_data = memcache.get('key')
+		if cache_data is not None:
+			books = cache_data
+			self.response.out.write('from cache<br>')
+		else:
+			books = ndb.gql('SELECT * FROM Book WHERE ANCESTOR IS :1 ORDER BY date DESC LIMIT 10', book_key)
+			memcache.add('key', books, 60)
+
 		for book in books:
 			result.append([book.name.encode('ascii'), book.author.encode('ascii')])
+			memcache.add('key', data, 60)
 
 		self.response.out.write(result)
 
