@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-#
-# Copyright 2007 Google Inc.
+# Copyright 2016 Google Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,74 +11,58 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-#
 
-
-import cgi
-import datetime
-import webapp2
+import endpoints
+from protorpc import message_types
+from protorpc import messages
+from protorpc import remote
 
 from google.appengine.ext import ndb
-from google.appengine.api import users
-from google.appengine.api import memcache
 
-book_key = ndb.Key('book', 'default_book')
-
-class Book(ndb.Model):
-  name = ndb.StringProperty()
-  author = ndb.StringProperty()
-  date = ndb.DateTimeProperty(auto_now_add=True)
+class Book(messages.Message):
+	name = messages.StringField(1);
+	author = messages.StringField(2);
 
 
-class MainPage(webapp2.RequestHandler):
-  def get(self):
-    self.response.out.write('<html><body>')
+class BookModel(ndb.Model):
+    """Greeting that stores a message."""
+    name = ndb.StringProperty(required=True)
+    author = ndb.StringProperty(required=True)
 
-    self.response.out.write("""
-          <form action="/add" method="post">
-            <div>Book Name<br><input type="text" name="book_name" ></input></div>
-            <div>Author Name<br><input type="text" name="book_author"></input></div>
-            <input type="submit" value="Add Book"></form>
-          </form>
-          <a href="/show">Show</a><br>
-        </body>
-      </html>""")
+class BookCollection(messages.Message):
+    items = messages.MessageField(Book, 1, repeated=True)
 
 
-class addBook(webapp2.RequestHandler):
-  def post(self):
-    book = Book(parent=book_key)
-
-    book.name = self.request.get('book_name')
-    book.author = self.request.get('book_author')
-    book.put()
-    memcache.delete('default_book:book')
-    self.response.out.write('Added<br>')
-    self.response.out.write('<a href="/">Add More</a><br>')
+STORED_BOOKS = BookCollection(items=[
+    Book(name="letusc", author="yash"),
+])
 
 
-class showBooks(webapp2.RequestHandler):
-	def get(self):
-		cache_data = memcache.get('default_book:book')
-		if cache_data is not None:
-			self.response.out.write('from cache<br>')
-			self.response.out.write(cache_data)
+@endpoints.api(name='books', version='v1')
+class BooksApi(remote.Service):
 
-		else:
-			result=[]
-			books = ndb.gql('SELECT * FROM Book WHERE ANCESTOR IS :1 ORDER BY date DESC LIMIT 10', book_key)
-			for book in books:
-				result.append([book.name.encode('ascii'), book.author.encode('ascii')])
-			memcache.add('default_book:book', result, 3600)
-			self.response.out.write('db<br>')
-			self.response.out.write(result)
+    @endpoints.method(
+        message_types.VoidMessage,
+        BookCollection,
+        path='books',
+        http_method='GET',
+        name='books.list')
+    def list_books(self, unused_request):
+    	result=[]
+    	for ans in BookModel.query():
+    		result.append(Book(name=ans.name, author=ans.author))
+        return BookCollection(items=result)
 
-			
-		# self.response.out.write(result)
+    @endpoints.method(
+    	Book, Book,
+    	name='books.put',
+    	http_method='POST',	
+    	path='put',
+    	)
+
+    def put_book(self, request):
+    	BookModel(name=request.name, author=request.author).put()
+    	return request
 
 
-app = webapp2.WSGIApplication([
-  ('/', MainPage),
-  ('/add', addBook),
-  ('/show', showBooks)
-], debug=True)
+api = endpoints.api_server([BooksApi])
